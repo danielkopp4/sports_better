@@ -91,4 +91,5 @@ class NBAHistoricalBettingAPI(HistoricalBettingDataAPI):
         return set(self._data["team_a"]).union(self._data["team_b"])
 
 if __name__ == "__main__":
+    download_data()
     print(load_data().head())

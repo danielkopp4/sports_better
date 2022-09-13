@@ -172,29 +172,25 @@ class SportsBettingOddsEnv(gym.Env):
         return observation
 
     def step(self, action):
-        # logging.info(action)
         action = self.pot * softmax(ACTION_MULTIPLIER * action)
         winning_team = self.get_winner()
 
-        # logging.info("softmaxed action %s %s", str(softmax(ACTION_MULTIPLIER * action)), str(action))
-        # logging.info("winning team %d", winning_team)
-        # logging.info("action[winning_team]=%f, self.o[winning_team]=%f", action[winning_team], self.o[winning_team].get_winnings_multiplier())
-
+        # calculate gains, losses
         self._gains = action[winning_team] * (self.o[winning_team].get_winnings_multiplier() - 1)
         self._losses = action[1 - winning_team]
-        self._pot = self.pot + self._gains - self._losses
-        # logging.info("action[1 - winning_team]=%f, gains=%f, losses=%f, new_pot=%f", action[1 - winning_team], self._gains, self._losses, self.pot)
 
+        # calculate reward
+        # reward = LAMBDA_GAINS * (self._gains / self.pot) + LAMBDA_LOSSES * (self._losses / self.pot)
         reward = LAMBDA_GAINS * self._gains + LAMBDA_LOSSES * self._losses
 
+        # reset pot and setup next game
+        self._pot = self.pot + self._gains - self._losses
         self.setup_next_game()
 
+        # return step results
         observation = self.calculate_observation()
-
         done = self.pot <= 0 or self._iterations >= self._episode_length or self._iterations == len(self._data_api) - 1
-
         info = {} # info unused
-
         return observation, reward, done, info
 
     def render(self, mode='console'):
