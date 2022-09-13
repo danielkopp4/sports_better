@@ -12,7 +12,7 @@ from src.data_api import HistoricalBettingDataAPI
 logging.basicConfig(level=logging.DEBUG, style="{")
 
 LAMBDA_GAINS: float = 1
-LAMBDA_LOSSES: float = -1
+LAMBDA_LOSSES: float = -1.1
 ACTION_MULTIPLIER: float = 4
 
 def clamp(low: float, high: float, value: float) -> float:

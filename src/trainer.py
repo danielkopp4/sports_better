@@ -1,6 +1,6 @@
 import logging
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3 import DDPG
+from stable_baselines3 import DDPG, SAC, TD3, A2C
 from stable_baselines3.common.noise import NormalActionNoise
 import numpy as np
 
@@ -16,9 +16,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 train_test_split = 0.8
 initial_amount = 1
-test_trials = 20
-episode_length = 100
+test_trials = 50
+episode_length = 10
 training_steps = episode_length * 100
+log_interval = 10
 
 def evaluate_betting_odds_model(model, test_env: SportsBettingOddsEnv, trials: int):
     env = test_env
@@ -59,8 +60,9 @@ def train_sports_betting_odds_env(betting_odds_api: HistoricalBettingDataAPI):
     n_actions = env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-    model = DDPG("MlpPolicy", env, action_noise=action_noise, verbose=1)
-    model.learn(total_timesteps=training_steps, log_interval=1)
+    # model = DDPG("MlpPolicy", env, action_noise=action_noise, verbose=1)
+    model = SAC("MlpPolicy", env, verbose=1)
+    model.learn(total_timesteps=training_steps, log_interval=log_interval)
 
     # env = model.get_env()
     env = SportsBettingOddsEnv(1, betting_odds_testing, episode_length=episode_length)
@@ -77,8 +79,7 @@ def train_sports_betting_odds_env(betting_odds_api: HistoricalBettingDataAPI):
         env.render('console')
 
         action, _states = model.predict(obs)
-        obs, rewards, dones, info = env.step(np.array([0,0,0]))
-        # obs, rewards, dones, info = env.step(action)
+        obs, rewards, dones, info = env.step(action)
 
         if dones:
             env.render('console')
