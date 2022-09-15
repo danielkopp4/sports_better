@@ -457,3 +457,5 @@ TSWLatexianTemp*
 *.xwm
 
 nba-historical-stats-and-betting-data/
+
+.vscode/
