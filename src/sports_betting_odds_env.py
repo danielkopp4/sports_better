@@ -9,40 +9,22 @@ from stable_baselines3.common.env_checker import check_env
 from src.betting_env.odds import Odds
 from src.data_api import HistoricalBettingDataAPI
 
-logging.basicConfig(level=logging.DEBUG, style="{")
 
 LAMBDA_GAINS: float = 1
-LAMBDA_LOSSES: float = -1.1
-ACTION_MULTIPLIER: float = 4
+LAMBDA_LOSSES: float = -1
+ACTION_MULTIPLIER: float = 3
 
-def clamp(low: float, high: float, value: float) -> float:
-    if value < low:
-        return low
-
-    if value > high:
-        return high
-
-    return value
 
 def softmax(x: np.ndarray) -> np.ndarray:
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum(axis=0)
-
-def expand_single_dims(x: np.ndarray, width: int) -> np.ndarray:
-    return np.repeat(
-        np.expand_dims(
-            x,
-            axis=1
-        ),
-        width,
-        axis=1
-    )
 
 
 def n_to_vec_one_hot(n: int, length: int) -> np.ndarray:
     result = np.zeros((length,))
     result[n] = 1
     return result
+
 
 def calculate_one_hot_mapping(items: Set) -> Dict:
     mapping = {}
@@ -52,9 +34,9 @@ def calculate_one_hot_mapping(items: Set) -> Dict:
     return mapping
 
 
-def make_observation_space(data_api: HistoricalBettingDataAPI, N_teams: int) -> spaces.Space:
-    # observation is [-g-, -oa-, -ob-, -date-, team_a_oh, team_b_oh] 
-    # in a 6xN matrix where N is number of teams
+def make_observation_space(N_teams: int) -> spaces.Space:
+    # observation is [g, oa, ob, date, *team_a_oh, *team_b_oh]
+    # in a 4+2*N matrix where N is number of teams
     return spaces.Box(
         low=np.concatenate((np.array([0,1,1,-1]), np.zeros((2*N_teams,))-0.01), dtype=np.float32), # date floor end at 2010 may need to go lower than -1 
         high=np.concatenate((np.array([np.inf,np.inf,np.inf,1]), 1.01*np.ones((2*N_teams,))), dtype=np.float32), # ceiling ends at 2040 may need to increase if doing this a while
@@ -77,7 +59,7 @@ class SportsBettingOddsEnv(gym.Env):
         )
 
         self._team_mapping = calculate_one_hot_mapping(data_api.get_unique_teams())
-        self.observation_space = make_observation_space(data_api, len(self._team_mapping))
+        self.observation_space = make_observation_space(len(self._team_mapping))
 
         self._iterations = 0
         self._pot = initial_pot
@@ -173,6 +155,7 @@ class SportsBettingOddsEnv(gym.Env):
 
     def step(self, action):
         action = self.pot * softmax(ACTION_MULTIPLIER * action)
+        self._action = softmax(ACTION_MULTIPLIER * action)
         winning_team = self.get_winner()
 
         # calculate gains, losses
@@ -198,6 +181,7 @@ class SportsBettingOddsEnv(gym.Env):
             if self._iterations == 0:
                 logging.info("i=%03d g=%.5e oa=%02.3f ob=%02.3f ta=%s tb=%s", self._iterations, self.pot, self.o_a.get_decimal(), self.o_b.get_decimal(), self.get_team_a(), self.get_team_b())
             else:
+                logging.info("action taken: [%.2f, %.2f, %.2f]", *self._action)
                 logging.info("i=%03d g=%.5e oa=%02.3f ob=%02.3f ta=%s tb=%s | ga=%.3e ls=%.5e", self._iterations, self.pot, self.o_a.get_decimal(), self.o_b.get_decimal(), self.get_team_a(), self.get_team_b(), self._gains, self._losses)
 
     def close(self):

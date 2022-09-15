@@ -1,4 +1,6 @@
 \documentclass{article}
+\usepackage{siunitx}
+\sisetup{output-exponent-marker=\ensuremath{\mathrm{e}}}
 
 \begin{document}
 
@@ -62,5 +64,13 @@
         How accurate are betting odds int terms of expected value.
 
 
-        
+    \subsection*{Updates}
+        After running the gambler model that just takes in $g$, $O$, team\_a, team\_b and date, it returned an average earnings with an episode length of 300 of $\mu =$ \num{9.94404e-01} and $\sigma =$ \num{6.81531e-03}.
+        This was run with the TD3 algorithm with $\lambda_{\text{loss}} = -1.1$ and $\lambda_{\text{gain}} = 1$.
+
+        PPO with $\lambda_{\text{loss}} = -1$ had final result of $\mu=$ \num{2.19557e-13} and
+        $std=$ \num{2.15727e-12}, very poor.
+        Ran A2C with the same $\lambda$ performed the same.
+
+        Changing the $\lambda$ value to -1.3 to see in an increase will help
 \end{document}

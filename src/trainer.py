@@ -1,13 +1,13 @@
 import logging
 
 logging.basicConfig(
-    filename="training.log",
+    filename="logs/training.log",
     format="[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3 import DDPG, SAC, TD3, A2C
+from stable_baselines3 import DDPG, SAC, TD3, A2C, PPO
 from stable_baselines3.common.noise import NormalActionNoise
 import numpy as np
 
@@ -21,8 +21,8 @@ initial_amount = 1
 test_trials = 100
 episode_length = 300
 # training_steps = episode_length * 10
-training_steps = 6912000 # should equate to about a half day, and 23,040 episodes
-log_interval = 100
+training_steps = (1 + 12) * 60 * 60 * 220  # should equate to about a half day, and 23,040 episodes
+log_interval = 60
 
 def evaluate_betting_odds_model(model, test_env: SportsBettingOddsEnv, trials: int):
     env = test_env
@@ -67,6 +67,8 @@ def train_sports_betting_odds_env(betting_odds_api: HistoricalBettingDataAPI):
     # model = DDPG("MlpPolicy", env, action_noise=action_noise, verbose=1)
     model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
     # model = SAC("MlpPolicy", env, verbose=1)
+    # model = A2C("MlpPolicy", env, verbose=1)
+    # model = PPO("MlpPolicy", env, verbose=1)
     model.learn(total_timesteps=training_steps, log_interval=log_interval)
 
     # env = model.get_env()
