@@ -12,17 +12,18 @@ from stable_baselines3.common.noise import NormalActionNoise
 import numpy as np
 
 from src.data_api import HistoricalBettingDataAPI
-from src.sports_betting_odds_env import SportsBettingOddsEnv
+from src.sports_betting_odds_env import SportsBettingOddsEnv, redistribute
 
 
 
 train_test_split = 0.8
 initial_amount = 1
-test_trials = 100
-episode_length = 300
-# training_steps = episode_length * 10
-training_steps = (1 + 12) * 60 * 60 * 220  # should equate to about a half day, and 23,040 episodes
-log_interval = 60
+test_trials = 1000
+episode_length = 1
+eval_epsisode_length = 300
+fps = 120
+training_steps = (10 - 4) * 60 * 60 * fps  # should equate to about a half day, and 23,040 episodes
+log_interval = 80 * fps
 
 def evaluate_betting_odds_model(model, test_env: SportsBettingOddsEnv, trials: int):
     env = test_env
@@ -42,10 +43,16 @@ def evaluate_betting_odds_model(model, test_env: SportsBettingOddsEnv, trials: i
 
 def pause():
     try:
-        input()
+        return input()
     except:
         print()
         exit()
+
+def parse_scalar(inpt):
+    try:
+        return float(inpt)
+    except:
+        return None
 
 def train_sports_betting_odds_env(betting_odds_api: HistoricalBettingDataAPI):
     logging.info("starting training on raw sports betting odds...")
@@ -65,14 +72,23 @@ def train_sports_betting_odds_env(betting_odds_api: HistoricalBettingDataAPI):
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
     # model = DDPG("MlpPolicy", env, action_noise=action_noise, verbose=1)
-    model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
+    model = TD3(
+        "MlpPolicy", 
+        env,
+        action_noise=action_noise,
+        # gamma=0,
+        # batch_size=512,
+        verbose=1
+    )
+
     # model = SAC("MlpPolicy", env, verbose=1)
     # model = A2C("MlpPolicy", env, verbose=1)
     # model = PPO("MlpPolicy", env, verbose=1)
     model.learn(total_timesteps=training_steps, log_interval=log_interval)
+    model.save("betting_model_{}".format(np.random.randint(0, 100000)))
 
     # env = model.get_env()
-    env = SportsBettingOddsEnv(1, betting_odds_testing, episode_length=episode_length)
+    env = SportsBettingOddsEnv(1, betting_odds_testing, episode_length=eval_epsisode_length)
     logging.info('finished')
     obs = env.reset()
 
@@ -80,17 +96,18 @@ def train_sports_betting_odds_env(betting_odds_api: HistoricalBettingDataAPI):
     logging.info('eval results mu=%.5e std=%.5e', *evaluate_betting_odds_model(model, env, test_trials))
     logging.info('press enter...')
 
-    pause()
+    scalar = parse_scalar(pause())
 
     while True:
         env.render('console')
 
         action, _states = model.predict(obs)
+        action = redistribute(action, scalar)
         obs, _rewards, dones, _info = env.step(action)
 
         if dones:
             env.render('console')
-            pause()
+            scalar = parse_scalar(pause())
             env.reset()
 
 

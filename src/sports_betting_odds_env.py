@@ -1,7 +1,7 @@
 import gym
 from gym import spaces
 import numpy as np
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import logging
 from stable_baselines3.common.env_checker import check_env
 
@@ -18,6 +18,17 @@ ACTION_MULTIPLIER: float = 3
 def softmax(x: np.ndarray) -> np.ndarray:
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum(axis=0)
+
+
+def redistribute(x: np.ndarray, scalar: Optional[float] = None) -> np.ndarray:
+    if scalar == None:
+        return x
+    
+    x_t = softmax(x)
+    amnt = np.sum(x_t[0:2]) / (2 * scalar)
+    x_t[2] += 2 * amnt
+    x_t[0:2] -= amnt
+    return np.log(x_t)
 
 
 def n_to_vec_one_hot(n: int, length: int) -> np.ndarray:
