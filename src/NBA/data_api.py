@@ -12,6 +12,7 @@ from src.betting_env.odds import Odds
 folder_name = "./nba-historical-stats-and-betting-data"
 money_line_file = "nba_betting_money_line.csv"
 games_file = "nba_games_all.csv"
+book_name = "Bovada"
 
 
 def download_data():
@@ -32,6 +33,10 @@ def load_data(book_name=None):
 
     bets = bets.drop(["book_name", "book_id"], axis=1)
     # add more column names to first array to include in final data
+    bets["game_id"] = bets["game_id"].astype(int)
+    bets["team_id"] = bets["team_id"].astype(int)
+    bets["a_team_id"] = bets["a_team_id"].astype(int)
+
     bets = bets.merge(games[["game_id", "team_id", "a_team_id", "is_home", "wl", "season_year"]], on=["game_id", "team_id", "a_team_id"])
     bets = bets.drop(["is_home", "game_id"], axis=1)
 
@@ -68,7 +73,7 @@ def load_data(book_name=None):
 
 class NBAHistoricalBettingAPI(HistoricalBettingDataAPI):
     def __init__(self):
-        self._data = load_data()
+        self._data = load_data(book_name=book_name)
         print("loaded", len(self._data), "points")
         super(NBAHistoricalBettingAPI, self).__init__()
 

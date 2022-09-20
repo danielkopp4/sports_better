@@ -11,7 +11,7 @@ from src.data_api import HistoricalBettingDataAPI
 
 
 LAMBDA_GAINS: float = 1
-LAMBDA_LOSSES: float = -1
+LAMBDA_LOSSES: float = -1.1
 ACTION_MULTIPLIER: float = 3
 
 
@@ -23,12 +23,16 @@ def softmax(x: np.ndarray) -> np.ndarray:
 def redistribute(x: np.ndarray, scalar: Optional[float] = None) -> np.ndarray:
     if scalar == None:
         return x
+
     
-    x_t = softmax(x)
-    amnt = np.sum(x_t[0:2]) / (2 * scalar)
-    x_t[2] += 2 * amnt
-    x_t[0:2] -= amnt
-    return np.log(x_t)
+    x_t = softmax(x * ACTION_MULTIPLIER)
+    amnt_0 = x_t[0] / scalar
+    amnt_1 = x_t[1] / scalar
+    amnt = amnt_0 + amnt_1
+    x_t[2] += amnt
+    x_t[0] -= amnt_0
+    x_t[1] -= amnt_1
+    return np.log(x_t) / ACTION_MULTIPLIER
 
 
 def n_to_vec_one_hot(n: int, length: int) -> np.ndarray:
@@ -49,9 +53,9 @@ def make_observation_space(N_teams: int) -> spaces.Space:
     # observation is [g, oa, ob, date, *team_a_oh, *team_b_oh]
     # in a 4+2*N matrix where N is number of teams
     return spaces.Box(
-        low=np.concatenate((np.array([0,1,1,-1]), np.zeros((2*N_teams,))-0.01), dtype=np.float32), # date floor end at 2010 may need to go lower than -1 
-        high=np.concatenate((np.array([np.inf,np.inf,np.inf,1]), 1.01*np.ones((2*N_teams,))), dtype=np.float32), # ceiling ends at 2040 may need to increase if doing this a while
-        shape=(4+2*N_teams,),
+        low=np.concatenate((np.array([1,1,-1]), np.zeros((2*N_teams,))-0.01), dtype=np.float32), # date floor end at 2010 may need to go lower than -1 
+        high=np.concatenate((np.array([np.inf,np.inf,1]), 1.01*np.ones((2*N_teams,))), dtype=np.float32), # ceiling ends at 2040 may need to increase if doing this a while
+        shape=(3+2*N_teams,),
         dtype=np.float32
     )
 
@@ -60,7 +64,7 @@ def make_observation_space(N_teams: int) -> spaces.Space:
 class SportsBettingOddsEnv(gym.Env):
     metadata = {'render.modes': ['console', 'none']}
 
-    def __init__(self, initial_pot: float, data_api: HistoricalBettingDataAPI, episode_length: int = -1): # takes some variable that biases the betting odds o_a, o_b
+    def __init__(self, initial_pot: float, data_api: HistoricalBettingDataAPI): # takes some variable that biases the betting odds o_a, o_b
         super(SportsBettingOddsEnv, self).__init__()
         self.action_space = spaces.Box(
             low=np.array([-1,-1,-1],dtype=np.float32), 
@@ -72,21 +76,11 @@ class SportsBettingOddsEnv(gym.Env):
         self._team_mapping = calculate_one_hot_mapping(data_api.get_unique_teams())
         self.observation_space = make_observation_space(len(self._team_mapping))
 
-        self._iterations = 0
-        self._pot = initial_pot
-        self._initial_pot = initial_pot
         self._data_api = data_api
         self._order = np.arange(len(self._data_api))
-        self._episode_length = episode_length
-
-        if episode_length == -1:
-            self._episode_length = len(self._data_api)
+        self._iterations = 0
 
         self.setup_next_game()
-
-    @property
-    def pot(self) -> np.float32:
-        return self._pot
 
     @property
     def o_a(self) -> Odds:
@@ -139,7 +133,7 @@ class SportsBettingOddsEnv(gym.Env):
     def calculate_observation(self) -> np.ndarray:
         return np.concatenate((
             np.array(
-                    [self.pot, self.o_a.get_decimal(), self.o_b.get_decimal(), self.date], 
+                    [self.o_a.get_decimal(), self.o_b.get_decimal(), self.date], 
                     dtype=np.float32
             ),
             self.team_a,
@@ -151,22 +145,22 @@ class SportsBettingOddsEnv(gym.Env):
         return self._order[self._iterations]
 
     def setup_next_game(self):
-        self.increment()
         self._o_a, self._o_b, self._team_a, self._team_b, self._date, self._winner = self.data_point
 
-    def increment(self):
+    def reset(self) -> np.ndarray:
         self._iterations += 1
 
-    def reset(self) -> np.ndarray:
-        self._iterations = 0
-        self._pot = self._initial_pot
-        np.random.shuffle(self._order)
+        if self._iterations == len(self._data_api):
+            np.random.shuffle(self._order)
+            self._iterations = 0
+
         observation = self.calculate_observation()
         return observation
 
     def step(self, action):
-        action = self.pot * softmax(ACTION_MULTIPLIER * action)
-        self._action = softmax(ACTION_MULTIPLIER * action)
+        action = softmax(ACTION_MULTIPLIER * action)
+        # print("action:", action)
+        self._action = action
         winning_team = self.get_winner()
 
         # calculate gains, losses
@@ -174,30 +168,65 @@ class SportsBettingOddsEnv(gym.Env):
         self._losses = action[1 - winning_team]
 
         # calculate reward
+        # print("winning odds:", action[winning_team])
+        # print("gains:", self._gains)
+        # print("losing odds:", action[1 - winning_team])
+        # print("losses:", self._losses)
+        # print("ngains:",  self._gains / self.pot)
+        # print("nlosses:", self._losses / self.pot)
         # reward = LAMBDA_GAINS * (self._gains / self.pot) + LAMBDA_LOSSES * (self._losses / self.pot)
-        reward = LAMBDA_GAINS * self._gains + LAMBDA_LOSSES * self._losses
+        reward = LAMBDA_GAINS * self._gains + LAMBDA_LOSSES * self._losses 
+        # print("reward:", reward)
 
-        # reset pot and setup next game
-        self._pot = self.pot + self._gains - self._losses
         self.setup_next_game()
 
         # return step results
         observation = self.calculate_observation()
-        done = self.pot <= 0 or self._iterations >= self._episode_length or self._iterations == len(self._data_api) - 1
-        info = {} # info unused
+        done = True
+        info = {
+            "pot": 1 + self._gains - self._losses
+        }
         return observation, reward, done, info
 
     def render(self, mode='console'):
         if mode == 'console':
             if self._iterations == 0:
-                logging.info("i=%03d g=%.5e oa=%02.3f ob=%02.3f ta=%s tb=%s", self._iterations, self.pot, self.o_a.get_decimal(), self.o_b.get_decimal(), self.get_team_a(), self.get_team_b())
+                logging.info("oa=%02.3f ob=%02.3f ta=%s tb=%s", self.o_a.get_decimal(), self.o_b.get_decimal(), self.get_team_a(), self.get_team_b())
             else:
                 logging.info("action taken: [%.2f, %.2f, %.2f]", *self._action)
-                logging.info("i=%03d g=%.5e oa=%02.3f ob=%02.3f ta=%s tb=%s | ga=%.3e ls=%.5e", self._iterations, self.pot, self.o_a.get_decimal(), self.o_b.get_decimal(), self.get_team_a(), self.get_team_b(), self._gains, self._losses)
+                logging.info("oa=%02.3f ob=%02.3f ta=%s tb=%s | ga=%.3e ls=%.5e", self.o_a.get_decimal(), self.o_b.get_decimal(), self.get_team_a(), self.get_team_b(), self._gains, self._losses)
 
     def close(self):
         pass
 
+class MultiGameSimulation:
+    def __init__(self, model, env):
+        self._model = model
+        self._env = env
+
+    def run_sims(self, length, trials, scalar=None, verbose=0):
+        amounts = []
+        for _ in range(trials):
+            pot = 1
+            for _ in range(length):
+                obs = self._env.reset()
+                action, _ = self._model.predict(obs)
+                action = redistribute(action, scalar)
+                _, _, _, info = self._env.step(action)
+                pot *= info["pot"]
+
+                if verbose > 0:
+                    logging.info("pot=%s, action=%s, obs=%s", str(pot), str(softmax(ACTION_MULTIPLIER * action)), str(obs[0:4]))
+                    logging.info("="*10)
+
+                if pot == 0:
+                    break
+                    
+            amounts.append(pot)
+
+        return amounts
+
+        
 if __name__ == "__main__":
     from src.NBA.data_api import NBAHistoricalBettingAPI
     api = NBAHistoricalBettingAPI()

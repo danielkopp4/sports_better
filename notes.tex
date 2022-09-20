@@ -83,5 +83,10 @@
         billions though). Question: can i divide both $\mu$ and $\sigma$ by the same amount to bolster the stability?
 
         I will now try removing any possibility of cheating by removing all duplicates. Additionally, I will save 
-        the model so I can do future testing.
+        the model so I can do future testing. 
+
+        In the future try removing the \verb|/ self.pot| in reward calc for the env.
+
+        Resulted in $\mu=$\num{9.80333e-01} $\sigma =$ \num{9.72142e-01} $sem=$ \num{3.07418e-02}. Somehow the reward
+        was that of the original experiment where I reached a $\mu$ of 1.6. I'll have to identify all the differences.
 \end{document}
